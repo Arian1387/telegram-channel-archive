@@ -15,7 +15,7 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ...",
     "Referer": "https://t.me/",
 }
-CUTOFF_DATE = datetime.now(timezone.utc) - timedelta(days=10)
+CUTOFF_DATE = datetime.now(timezone.utc) - timedelta(days=1)
 
 def get_last_id(channel_folder):
     last_id_file = channel_folder / "last_id.txt"
