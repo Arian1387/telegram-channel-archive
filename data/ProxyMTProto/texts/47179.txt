@@ -1,0 +1,1 @@
+Server:89.125.113.14Port:443Secret:ee3e7641e0b5826dee9d6b6b265bfe05ed79616e6465782e7275@ProxyMTProto
