@@ -1,1 +1,0 @@
-Server:5.231.56.165Port:443Secret:7c81481b8a23812706cbd96fb2c8b0b8@ProxyMTProto

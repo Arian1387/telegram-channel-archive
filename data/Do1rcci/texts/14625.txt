@@ -1,1 +1,0 @@
-Psiphon Proxy:Host:109.122.246.143Port: 4030Hostname:87.247.188.93Port: 8080Channel :@Do1rcci

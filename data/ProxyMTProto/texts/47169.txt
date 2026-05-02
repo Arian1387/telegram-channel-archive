@@ -1,1 +1,0 @@
-Server:tproxyru.livePort:8980Secret: ee104462821249bd7ac519130220c25d09617669746f2e7275@ProxyMTProto

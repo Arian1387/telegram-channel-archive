@@ -1,1 +1,0 @@
-Server:proxysb.xyzPort:443Secret:eef7ca86268af768135f9ca41f89e9efb670726f787973622e78797a@ProxyMTProto
