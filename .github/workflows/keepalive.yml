@@ -1,0 +1,16 @@
+name: Keep Alive
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # هر روز یک بار اجرا می‌شود.
+  workflow_dispatch:     # امکان اجرای دستی
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep the workflow alive
+        uses: liskin/gh-workflow-keepalive@v1
