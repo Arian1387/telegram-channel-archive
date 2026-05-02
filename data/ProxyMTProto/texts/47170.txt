@@ -1,0 +1,1 @@
+Server:proxytg.fitPort:443Secret:eec8f164f338f20e2e3c7a0f4e0408a51270726f787974672e666974@ProxyMTProto

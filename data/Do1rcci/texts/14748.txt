@@ -1,0 +1,1 @@
+پروکسی متصلtg://proxy?server=130.49.218.57&port=443&secret=ee8aa50573bd2e964427df682f93935ce4646c2e676f6f676c652e636f6dChannel :@Do1rcci
