@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 CHANNELS = [
     "oxnet_ir",
     "Do1rcci",
+    "iciou",
     "ProxyMTProto",
     "Pastwrize",
     "napsternetv"
