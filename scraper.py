@@ -38,32 +38,64 @@ def save_last_id(channel_folder: Path, msg_id: int):
     (channel_folder / "last_id.txt").write_text(str(msg_id))
 
 
+def get_filename_from_response(response, fallback_name: str) -> str:
+    """
+    سعی می‌کند نام فایل را از Content-Disposition هدر دریافت کند.
+    اگر پیدا نشد، نام فایل را از URL نهایی (بعد از redirect) استخراج می‌کند.
+    اگر باز هم پیدا نشد، fallback را برمی‌گرداند.
+    """
+    content_disp = response.headers.get("Content-Disposition", "")
+
+    # فرمت اول: attachment; filename="name.ext"
+    match = re.search(r'filename\s*=\s*["\']?([^"\';]+)["\']?', content_disp, re.IGNORECASE)
+    if match:
+        name = match.group(1).strip()
+        if name:
+            print(f"    📄 نام فایل از هدر: {name}")
+            return name
+
+    # فرمت دوم: filename*=UTF-8''name.ext
+    match = re.search(r"filename\*\s*=\s*UTF-8''(.+)", content_disp, re.IGNORECASE)
+    if match:
+        from urllib.parse import unquote
+        name = unquote(match.group(1)).strip()
+        if name:
+            print(f"    📄 نام فایل از هدر (UTF-8): {name}")
+            return name
+
+    # تلاش از URL نهایی (بعد از ریدایرکت‌ها)
+    final_url = response.url
+    path_part = final_url.split("?")[0]
+    url_name = path_part.rsplit("/", 1)[-1]
+    if "." in url_name and len(url_name) < 200:
+        print(f"    📄 نام فایل از URL نهایی: {url_name}")
+        return url_name
+
+    return fallback_name
+
+
 def download_media(url: str, filepath: Path):
-    """دانلود یک فایل رسانه‌ای با مدیریت خطا"""
+    """دانلود یک فایل رسانه‌ای با تشخیص نام واقعی از هدر"""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=90)
+        # اول یک HEAD request برای گرفتن هدر بدون دانلود کامل
+        # بعد GET request اصلی با stream=True برای تشخیص نام نهایی
+        resp = requests.get(url, headers=HEADERS, timeout=90, stream=True)
         resp.raise_for_status()
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        filepath.write_bytes(resp.content)
-        print(f"    ✅ دانلود شد: {filepath.name} ({len(resp.content)} بایت)")
+
+        # تشخیص نام واقعی فایل
+        real_name = get_filename_from_response(resp, filepath.name)
+
+        # تعیین مسیر نهایی با نام واقعی
+        final_dir = filepath.parent
+        final_path = final_dir / real_name
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # ذخیره محتوا
+        content = resp.content
+        final_path.write_bytes(content)
+        print(f"    ✅ دانلود شد: {real_name} ({len(content)} بایت)")
     except Exception as e:
         print(f"    ❌ خطا در دانلود {filepath.name}: {e}")
-
-
-def extract_filename_from_url(url: str, fallback_name: str) -> str:
-    """
-    تلاش می‌کند نام فایل را از URL استخراج کند.
-    اگر پیدا نشد از fallback_name استفاده می‌کند.
-    """
-    # برخی لینک‌ها به شکل .../filename.ext هستند
-    # برخی هم کوئری دارند ?...
-    # اول بخش قبل از ? را می‌گیریم
-    path_part = url.split("?")[0]
-    # بعد آخرین بخش بعد از / که نقطه داشته باشد
-    name = path_part.rsplit("/", 1)[-1]
-    if "." in name and len(name) < 200:  # یک نام فایل معقول
-        return name
-    return fallback_name
 
 
 def process_message(msg_div):
@@ -71,7 +103,6 @@ def process_message(msg_div):
     data_post = msg_div.get("data-post")
     if not data_post:
         return None
-    # data-post مثل "oxnet_ir/12258" است
     msg_id = int(data_post.split("/")[-1])
 
     # تاریخ پیام
@@ -90,7 +121,7 @@ def process_message(msg_div):
     # رسانه‌ها
     media = []
 
-    # عکس (از background-image داخل تگ a با کلاس photo_wrap)
+    # عکس
     photo_wrap = msg_div.find("a", class_="tgme_widget_message_photo_wrap")
     if photo_wrap:
         style = photo_wrap.get("style", "")
@@ -103,11 +134,10 @@ def process_message(msg_div):
     if video and video.get("src"):
         media.append(("video", video["src"]))
 
-    # فایل/سند (هر نوع فایلی: ehi, json, zip, apk, pdf, ...)
+    # فایل/سند (هر نوع فایلی)
     doc_wrap = msg_div.find("a", class_="tgme_widget_message_document_wrap")
     if doc_wrap and doc_wrap.get("href"):
         doc_url = doc_wrap["href"]
-        # اگر لینک با / شروع شود، کاملش می‌کنیم
         if doc_url.startswith("/"):
             doc_url = f"https://t.me{doc_url}"
         media.append(("document", doc_url))
@@ -121,7 +151,7 @@ def process_message(msg_div):
 
 
 def scrape_page(channel: str, offset_id: int = 0):
-    """دریافت یک صفحه از t.me/s و برگرداندن div های پیام"""
+    """دریافت یک صفحه از t.me/s"""
     url = f"https://t.me/s/{channel}"
     if offset_id:
         url += f"?before={offset_id}"
@@ -133,7 +163,7 @@ def scrape_page(channel: str, offset_id: int = 0):
 
 
 def scrape_channel(channel: str):
-    """پردازش کامل یک کانال: پیمایش صفحه‌ها، دانلود فایل‌های جدیدتر از ۱۰ روز"""
+    """پردازش کامل یک کانال"""
     print(f"\n{'='*50}")
     print(f"🎯 شروع کانال: {channel}")
     print(f"{'='*50}")
@@ -141,7 +171,7 @@ def scrape_channel(channel: str):
     base_dir = Path("data") / channel
     photos_dir = base_dir / "photos"
     videos_dir = base_dir / "videos"
-    files_dir  = base_dir / "files"      # هر فایلی غیر از عکس و ویدئو
+    files_dir  = base_dir / "files"
     texts_dir  = base_dir / "texts"
 
     for d in [photos_dir, videos_dir, files_dir, texts_dir]:
@@ -165,13 +195,11 @@ def scrape_channel(channel: str):
             if parsed is None:
                 continue
 
-            # رسیدن به پیام‌های قبلاً ذخیره‌شده
             if parsed["id"] <= last_id:
-                print(f"  ⏹ به پیام ذخیره‌شده رسیدیم (ID: {parsed['id']}) - توقف")
+                print(f"  ⏹ پیام ذخیره‌شده (ID: {parsed['id']}) - توقف")
                 stop_scraping = True
                 break
 
-            # رد کردن پیام‌های قدیمی‌تر از ۱۰ روز
             if parsed["datetime"] is not None and parsed["datetime"] < CUTOFF_DATE:
                 print(f"  ⏳ پیام قدیمی‌تر از ۱۰ روز (ID: {parsed['id']}) - توقف")
                 stop_scraping = True
@@ -179,53 +207,47 @@ def scrape_channel(channel: str):
 
             new_messages.append(parsed)
 
-        # آفست برای صفحهٔ بعد
         if not stop_scraping and msgs:
             last_on_page = process_message(msgs[-1])
             if last_on_page:
                 offset = last_on_page["id"]
-            time.sleep(1.5)  # احترام به سرور تلگرام
+            time.sleep(1.5)
 
     if not new_messages:
-        print("  ✨ پیام جدیدی در ۱۰ روز اخیر وجود ندارد.")
+        print("  ✨ پیام جدیدی در ۱۰ روز اخیر نیست.")
         return
 
-    # مرتب‌سازی از قدیمی به جدید
     new_messages.sort(key=lambda x: x["id"])
     print(f"  📩 تعداد پیام‌های جدید: {len(new_messages)}")
 
     for msg in new_messages:
         msg_id = msg["id"]
 
-        # ذخیره متن پیام (حتی اگر خالی باشد)
+        # ذخیره متن پیام
         text_file = texts_dir / f"{msg_id}.txt"
         text_file.write_text(msg["text"], encoding="utf-8")
 
         # دانلود رسانه‌ها
         for med_type, med_url in msg["media"]:
-            # استخراج نام فایل از URL
-            fallback_name = f"{msg_id}_{med_type}.dat"
-            filename = extract_filename_from_url(med_url, fallback_name)
+            # نام موقت با پسوند dat که بعداً با نام واقعی جایگزین می‌شود
+            temp_name = f"{msg_id}_{med_type}.dat"
 
             if med_type == "photo":
-                filepath = photos_dir / filename
+                filepath = photos_dir / temp_name
             elif med_type == "video":
-                filepath = videos_dir / filename
+                filepath = videos_dir / temp_name
             else:
-                # document و هر نوع فایل دیگر → پوشه files
-                filepath = files_dir / filename
+                filepath = files_dir / temp_name
 
             download_media(med_url, filepath)
 
-        # به‌روزرسانی آخرین شناسه
         save_last_id(base_dir, msg["id"])
 
-    print(f"  ✅ کانال {channel} به‌روزرسانی شد. (آخرین شناسه: {new_messages[-1]['id']})")
+    print(f"  ✅ کانال {channel} به‌روزرسانی شد.")
 
 
 def main():
     print(f"🕒 زمان شروع: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
-    print(f"📅 تاریخ قطع: {CUTOFF_DATE.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print(f"📋 کانال‌ها: {', '.join(CHANNELS)}")
 
     for channel in CHANNELS:
@@ -233,7 +255,6 @@ def main():
             scrape_channel(channel)
         except Exception as e:
             print(f"  ❌ خطا در پردازش کانال {channel}: {e}")
-            # ادامه به کانال بعدی
 
     print(f"\n🕒 زمان پایان: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
