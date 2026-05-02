@@ -8,8 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 # ⚠️ نام کاربری کانال‌ها را بدون @ وارد کنید
 CHANNELS = [
-    "channel_one",
-    "channel_two",
+    "oxnet_ir",
 ]
 
 HEADERS = {
