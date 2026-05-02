@@ -8,6 +8,10 @@ from datetime import datetime, timedelta, timezone
 # ⚠️ نام کاربری کانال‌ها را بدون @ وارد کنید
 CHANNELS = [
     "oxnet_ir",
+    "Do1rcci",
+    "ProxyMTProto",
+    "Pastwrize",
+    "napsternetv"
     # هر کانال دیگر را اینجا اضافه کنید
 ]
 
@@ -19,7 +23,7 @@ HEADERS = {
     ),
     "Referer": "https://t.me/",
 }
-CUTOFF_DATE = datetime.now(timezone.utc) - timedelta(days=10)
+CUTOFF_DATE = datetime.now(timezone.utc) - timedelta(days=1)
 
 
 def get_last_id(channel_folder: Path) -> int:
