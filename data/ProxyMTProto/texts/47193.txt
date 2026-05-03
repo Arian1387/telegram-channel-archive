@@ -1,0 +1,1 @@
+Server:186.246.5.110Port:443Secret:ee34fd4e8e9b8d0008a2d80f7e8b80ce8277622e7275@ProxyMTProto
