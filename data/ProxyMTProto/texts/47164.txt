@@ -1,1 +1,0 @@
-Server:192.124.189.91Port:5228Secret:eeeef23efc8eeb72f8b96285fabeaa69f56d74616c6b2e676f6f676c652e636f6d@ProxyMTProto
