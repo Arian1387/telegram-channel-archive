@@ -1,0 +1,1 @@
+Server:amsterdam.geodns.infoPort:443Secret:ee79e344818749bd7ac519130220c25d09@ProxyMTProto

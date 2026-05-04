@@ -1,0 +1,1 @@
+Server:ultra.telehelp.topPort:443Secret:ee1d36cba6cc6ae2eb779806189b95efb864726976652e676f6f676c652e636f6d@ProxyMTProto
