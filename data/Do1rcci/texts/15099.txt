@@ -1,1 +1,0 @@
-AM TUNNEL :udp://10.185.68.113همراه اولChannel :@Do1rcci

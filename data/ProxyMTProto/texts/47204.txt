@@ -1,1 +1,0 @@
-Server:y.vkgosuslugi.ruPort:443Secret:eef7f61a772049acbf6712254678726d8477622e7275@ProxyMTProto

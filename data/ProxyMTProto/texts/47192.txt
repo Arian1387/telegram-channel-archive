@@ -1,1 +1,0 @@
-Server:s.qcold.onlinePort:853Secret:eea65967b55fdb60e0b3ac69aa46abc3de732e71636f6c642e6f6e6c696e65@ProxyMTProto

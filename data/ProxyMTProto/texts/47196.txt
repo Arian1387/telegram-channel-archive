@@ -1,1 +1,0 @@
-Server:gproxy-sosavpn.duckdns.orgPort:8443Secret:bfb77f1c4bf8a5c16eb5a3d93954ce69@ProxyMTProto

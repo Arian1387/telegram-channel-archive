@@ -1,1 +1,0 @@
-Server:wow.etherealvpn.ukPort:443Secret:eeafb51059be4e6d73ec385bf2235406fa706574726f766963682e7275@ProxyMTProto

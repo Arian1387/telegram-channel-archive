@@ -1,1 +1,0 @@
-Server:getfastlink.clickPort:443Secret:ee47e3a8b2c1f4e9d0a6b5c8d7e4f3a2b1676574666173746c696e6b2e636c69636b@ProxyMTProto

@@ -1,1 +1,0 @@
-Server:fast.tg.toggle.orgPort:443Secret:ee4ef574bb2e39f96833252cdfa792eee4676f6f676c652e636f6d@ProxyMTProto

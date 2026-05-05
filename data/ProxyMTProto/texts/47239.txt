@@ -1,1 +1,0 @@
-Server:gg.etherealvpn.ukPort:443Secret:eee2c7176c8fc89b33fef34325dc5b9f01d186d17777772e6d6963726f736f66742e636f6d@ProxyMTProto
