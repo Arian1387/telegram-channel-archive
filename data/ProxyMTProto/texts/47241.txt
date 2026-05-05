@@ -1,0 +1,1 @@
+Server:swekitty2.grittytarantula.sbsPort:443Secret:ee3730ca5b692dc64af181a706bcc5cabc7377656b69747479322e677269747479746172616e74756c612e736273@ProxyMTProto

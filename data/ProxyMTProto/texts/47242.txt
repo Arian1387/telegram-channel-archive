@@ -1,0 +1,1 @@
+Server:proxyfsociety.strangled.netPort:443Secret:eeec5071a832c00b83ea970629d08ef2fe706574726f766963682e7275@ProxyMTProto

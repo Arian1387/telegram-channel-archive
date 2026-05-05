@@ -1,0 +1,1 @@
+Server:mtproto.wemakecode.ruPort:6443Secret:e569c9792f984167ea08d493735fe342@ProxyMTProto

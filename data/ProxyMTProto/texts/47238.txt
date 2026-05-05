@@ -1,0 +1,1 @@
+Server:swe-1.vespersubpage.techPort:443Secret:ee503ff7a4c00ebb5fe94b58c1a418e16f706574726f766963682e7275@ProxyMTProto

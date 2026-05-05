@@ -1,0 +1,1 @@
+Server:193.23.199.16Port:8443Secret:eed942e15d1c4f6a22a8c8fc1d631f6eb9646c2e676f6f676c652e636f6d@ProxyMTProto
