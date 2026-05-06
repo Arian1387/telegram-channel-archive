@@ -1,0 +1,58 @@
+name: Telegram Scraper & Downloader
+
+on:
+  schedule:
+    # هر ۳۰ دقیقه یک‌بار اجرا می‌شود
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      telegram_link:
+        description: '🔗 لینک پست تلگرام (برای دانلود دستی)'
+        required: false
+        type: string
+        default: ''
+      split_threshold_mb:
+        description: '📦 حداکثر حجم هر قطعه (MB)'
+        required: false
+        type: number
+        default: 90
+
+permissions:
+  contents: write
+
+jobs:
+  scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run scraper
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            python scraper.py
+          else
+            if [ -n "${{ github.event.inputs.telegram_link }}" ]; then
+              python scraper.py --link "${{ github.event.inputs.telegram_link }}" --threshold ${{ github.event.inputs.split_threshold_mb }}
+            else
+              echo "No link provided, running default channel scrape"
+              python scraper.py
+            fi
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "📥 بروزرسانی خودکار [skip ci]"
+          git push
