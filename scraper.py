@@ -24,7 +24,7 @@ HEADERS = {
     ),
     "Referer": "https://t.me/",
 }
-CUTOFF_DATE = datetime.now(timezone.utc) - timedelta(days=1)
+CUTOFF_DATE = datetime.now(timezone.utc) - timedelta(days=3)
 
 
 def sanitize_filename(name: str) -> str:
