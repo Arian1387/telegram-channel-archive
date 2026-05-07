@@ -1,0 +1,387 @@
+name: YouTube Downloader Pro
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '📥 Download mode'
+        required: true
+        type: choice
+        options:
+          - single
+          - playlist
+          - channel
+          - search
+        default: 'single'
+      url:
+        description: '🎬 URL or search query (channel: @handle or channel URL)'
+        required: true
+        type: string
+      output_format:
+        description: '🎞️ Output type'
+        required: true
+        type: choice
+        options:
+          - mp4 (video)
+          - mp3 (audio only)
+        default: 'mp4 (video)'
+      desired_quality:
+        description: '📊 Quality (video: 144p|360p|480p|720p|1080p; audio: 64|128|192|320kbps)'
+        required: false
+        type: string
+        default: '720p'
+      max_part_mb:
+        description: '📦 Maximum part size in MB (0 = do not split)'
+        required: false
+        type: number
+        default: 90
+      output_folder:
+        description: '📁 Folder to store files (relative to repo root)'
+        required: false
+        type: string
+        default: 'downloads'
+      max_videos:
+        description: '🔢 Max videos for playlist/channel/search'
+        required: false
+        type: number
+        default: 10
+      start_index:
+        description: '▶️ Start index (1‑based, for playlist/channel)'
+        required: false
+        type: number
+        default: 1
+      end_index:
+        description: '⏹️ End index (0 = no bound, for playlist/channel)'
+        required: false
+        type: number
+        default: 0
+      create_index:
+        description: '📄 Create index / info file?'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  fetch-and-store:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y zip curl jq python3
+          # yt-dlp for playlist/channel/search modes
+          python3 -m pip install -q requests yt-dlp
+
+      - name: Download & process media
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          INPUT_URL: ${{ github.event.inputs.url }}
+          INPUT_FORMAT: ${{ github.event.inputs.output_format == 'mp3 (audio only)' && 'mp3' || 'mp4' }}
+          INPUT_QUALITY: ${{ github.event.inputs.desired_quality }}
+          MAX_PART_MB: ${{ github.event.inputs.max_part_mb }}
+          OUTPUT_FOLDER: ${{ github.event.inputs.output_folder }}
+          MAX_VIDEOS: ${{ github.event.inputs.max_videos }}
+          START_INDEX: ${{ github.event.inputs.start_index }}
+          END_INDEX: ${{ github.event.inputs.end_index }}
+          CREATE_INDEX: ${{ github.event.inputs.create_index }}
+        run: |
+          python3 << 'EOF'
+          import os, sys, time, re, json, subprocess
+          import requests
+          from pathlib import Path
+          from datetime import datetime
+
+          # -------------------- configuration --------------------
+          MODE = os.environ['MODE']
+          URL = os.environ['INPUT_URL']
+          FMT = os.environ['INPUT_FORMAT']            # 'mp3' or 'mp4'
+          QUAL = os.environ['INPUT_QUALITY']           # e.g. '720p', '192kbps'
+          MAX_PART_MB = int(os.environ['MAX_PART_MB'])
+          OUT_DIR = os.environ['OUTPUT_FOLDER']
+          MAX_VIDEOS = int(os.environ.get('MAX_VIDEOS', 10))
+          START_IDX = int(os.environ.get('START_INDEX', 1))
+          END_IDX = int(os.environ.get('END_INDEX', 0))
+          CREATE_INDEX = os.environ.get('CREATE_INDEX', 'false').lower() == 'true'
+
+          # quality normalization
+          if FMT == 'mp3':
+              bitrate = QUAL.replace('kbps', '')
+              if bitrate not in ('64', '128', '192', '320'):
+                  bitrate = '192'
+              quality_field = bitrate
+          else:
+              if QUAL not in ('144p', '360p', '480p', '720p', '1080p'):
+                  QUAL = '720p'
+              quality_field = QUAL
+
+          # API settings (same as second code)
+          API_URL = "https://hub.ytconvert.org/api/download"
+          session = requests.Session()
+          session.headers.update({
+              "User-Agent": "Mozilla/5.0",
+              "Content-Type": "application/json",
+              "Referer": "https://media.ytmp3.gg/",
+              "Origin": "https://media.ytmp3.gg"
+          })
+          # warm up
+          session.get("https://media.ytmp3.gg/")
+
+          # -------------------- helper functions --------------------
+          def safe_name(text, maxlen=40):
+              s = re.sub(r'[^\w]', '_', text.replace(' ', '_'))[:maxlen]
+              s = re.sub(r'_+', '_', s).strip('_')
+              return s or 'noname'
+
+          def get_video_id(url):
+              m = re.search(r'(?:v=|\/)([a-zA-Z0-9_-]{11})', url)
+              return m.group(1) if m else 'unknown'
+
+          def call_api(video_url):
+              """Call the download API, return (download_url, title) or None"""
+              payload = {
+                  "url": video_url,
+                  "os": "linux",
+                  "output": {
+                      "type": "audio" if FMT == "mp3" else "video",
+                      "format": FMT,
+                      "quality": quality_field
+                  }
+              }
+              if FMT == "mp3":
+                  payload["audio"] = {"bitrate": f"{quality_field}k"}
+
+              try:
+                  resp = session.post(API_URL, json=payload, timeout=30)
+                  resp.raise_for_status()
+                  data = resp.json()
+              except Exception as e:
+                  print(f"API POST error: {e}")
+                  return None
+
+              status_url = data.get('statusUrl')
+              title = data.get('title', 'untitled')
+              if not status_url:
+                  return None
+
+              # wait for conversion
+              for _ in range(90):
+                  time.sleep(2)
+                  try:
+                      sr = session.get(status_url, timeout=15)
+                      sd = sr.json()
+                      if sd.get('status') == 'completed':
+                          return sd.get('downloadUrl'), title
+                      if sd.get('status') == 'failed':
+                          print("Conversion failed on server")
+                          return None
+                  except:
+                      continue
+              return None
+
+          def download_file(url, filepath):
+              """Download binary to filepath, return file size (bytes)"""
+              try:
+                  r = session.get(url, stream=True, timeout=600)
+                  r.raise_for_status()
+                  total = int(r.headers.get('content-length', 0))
+                  done = 0
+                  with open(filepath, 'wb') as f:
+                      for chunk in r.iter_content(65536):
+                          f.write(chunk)
+                          done += len(chunk)
+                          if total > 0 and done % (10*65536) == 0:
+                              print(f'\r   ⬇ {done*100/total:.1f}%', end='')
+                  print(f'\r   ⬇ 100.0%')
+                  return os.path.getsize(filepath)
+              except Exception as e:
+                  print(f"Download error: {e}")
+                  return 0
+
+          def split_if_needed(filepath, threshold_mb):
+              """Split file into multi-part zip if larger than threshold_mb (MB)"""
+              if threshold_mb <= 0:
+                  return
+              size_mb = os.path.getsize(filepath) / (1024*1024)
+              if size_mb > threshold_mb:
+                  print(f"   ✂ Splitting ({size_mb:.1f}MB) into {threshold_mb} MB parts...")
+                  parent = Path(filepath).parent
+                  name = Path(filepath).name
+                  subprocess.run(
+                      ['zip', '-r', '-q', '-s', f'{threshold_mb}m', f'{name}.zip', name],
+                      cwd=parent, check=True
+                  )
+                  os.remove(filepath)
+                  print(f"   ✅ Split completed")
+
+          def fetch_video_list(mode, url, max_n, start, end):
+              """
+              Use yt-dlp to get list of dicts: {url, title, id, ...}
+              Returns list of dicts and a safe folder name.
+              """
+              if mode == 'single':
+                  # not used here
+                  return [], ''
+              cmd = ['yt-dlp', '--flat-playlist', '--dump-json',
+                     '--no-warnings', '--no-check-certificate']
+              if mode == 'search':
+                  # search query
+                  cmd.append(f'ytsearch{max_n}:{url}')
+              else:
+                  cmd.append(url)
+                  if mode == 'channel':
+                      # if not URL, try @handle
+                      if not url.startswith('http'):
+                          if not url.startswith('@'):
+                              url2 = f'https://www.youtube.com/@{url}'
+                          else:
+                              url2 = f'https://www.youtube.com/{url}'
+                          cmd[-1] = url2
+                  # playlist end limit
+                  cmd.extend(['--playlist-end', str(max_n)]) if max_n > 0 else None
+
+              try:
+                  proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                  videos = []
+                  for line in proc.stdout.strip().split('\n'):
+                      if not line:
+                          continue
+                      data = json.loads(line)
+                      vid_id = data.get('id')
+                      if not vid_id:
+                          continue
+                      video_url = f'https://www.youtube.com/watch?v={vid_id}'
+                      title = data.get('title', 'untitled')[:60]
+                      videos.append({
+                          'id': vid_id,
+                          'title': title,
+                          'url': video_url
+                      })
+                  # extract folder name from playlist/channel/search
+                  if mode == 'playlist' or mode == 'channel':
+                      # try to get playlist/channel title from first video info
+                      try:
+                          info_cmd = ['yt-dlp', '--dump-json', '--no-warnings',
+                                      '--no-check-certificate', url]
+                          info_proc = subprocess.run(info_cmd, capture_output=True, text=True, timeout=15)
+                          if info_proc.returncode == 0:
+                              info = json.loads(info_proc.stdout)
+                              folder_name = info.get('title') or info.get('playlist_title') or url
+                          else:
+                              folder_name = url
+                      except:
+                          folder_name = url
+                      folder = safe_name(folder_name, 30) if folder_name else 'playlist'
+                  else:  # search
+                      folder = safe_name(f'search_{url}', 30)
+
+                  # apply range (start & end are 1-based)
+                  if start > 1 or end > 0:
+                      sliced = videos[start-1 : end if end > 0 else len(videos)]
+                      if len(sliced) < len(videos):
+                          print(f"   Range: {start} to {end if end>0 else 'end'} → {len(sliced)} videos")
+                      videos = sliced
+                  return videos, folder
+              except Exception as e:
+                  print(f"Error fetching video list: {e}")
+                  sys.exit(1)
+
+          # -------------------- main logic --------------------
+          os.makedirs(OUT_DIR, exist_ok=True)
+
+          if MODE == 'single':
+              # exactly the old behaviour of second code
+              print(f"🎬 Single video mode")
+              result = call_api(URL)
+              if not result:
+                  print("❌ Conversion failed")
+                  sys.exit(1)
+              dl_url, title = result
+              vid_id = get_video_id(URL)
+              clean_title = safe_name(title, 40) or vid_id
+              filename = f"{clean_title}_{vid_id}_{QUAL}.{FMT}"
+              filepath = os.path.join(OUT_DIR, filename)
+              print(f"   Downloading: {filename}")
+              size = download_file(dl_url, filepath)
+              if size:
+                  print(f"   ✅ Downloaded ({size/1024/1024:.1f} MB)")
+                  split_if_needed(filepath, MAX_PART_MB)
+                  if CREATE_INDEX:
+                      idx_path = os.path.join(OUT_DIR, "info.md")
+                      with open(idx_path, 'w') as f:
+                          f.write(f"# {title}\n\n- URL: {URL}\n- Quality: {QUAL}\n")
+              else:
+                  print("❌ Download failed")
+                  sys.exit(1)
+
+          else:
+              # playlist, channel, search
+              print(f"📋 {MODE.upper()} mode: fetching video list...")
+              vids, subfolder = fetch_video_list(MODE, URL, MAX_VIDEOS, START_IDX, END_IDX)
+              if not vids:
+                  print("❌ No videos found")
+                  sys.exit(1)
+              print(f"   Found {len(vids)} videos")
+
+              # create subfolder inside output folder
+              target_dir = os.path.join(OUT_DIR, subfolder)
+              os.makedirs(target_dir, exist_ok=True)
+
+              if CREATE_INDEX:
+                  idx_path = os.path.join(target_dir, "index.md")
+                  with open(idx_path, 'w') as idxf:
+                      idxf.write(f"# {subfolder}\n\n")
+                      idxf.write(f"_{datetime.now().strftime('%Y-%m-%d %H:%M')}_  |  {len(vids)} videos\n\n")
+                      idxf.write("| # | Title | Video ID |\n|---|-------|----------|\n")
+                      for i, v in enumerate(vids, 1):
+                          idxf.write(f"| {i} | {v['title']} | [{v['id']}]({v['url']}) |\n")
+
+              success = 0
+              for i, v in enumerate(vids, 1):
+                  print(f"\n📥 [{i}/{len(vids)}] {v['title']}")
+                  result = call_api(v['url'])
+                  if not result:
+                      print("   ❌ Conversion/skip")
+                      continue
+                  dl_url, title = result
+                  vid_id = v['id']
+                  clean_title = safe_name(title, 40) or vid_id
+                  filename = f"{clean_title}_{vid_id}_{QUAL}.{FMT}"
+                  filepath = os.path.join(target_dir, filename)
+                  size = download_file(dl_url, filepath)
+                  if size:
+                      print(f"   ✅ Downloaded ({size/1024/1024:.1f} MB)")
+                      split_if_needed(filepath, MAX_PART_MB)
+                      success += 1
+                  else:
+                      print("   ❌ Download failed")
+                  # small delay to be gentle
+                  if i < len(vids):
+                      time.sleep(1)
+              print(f"\n✅ Done: {success}/{len(vids)} videos downloaded")
+
+          # cleanup any leftover empty parts folders (if exists)
+          parts_dir = os.path.join(OUT_DIR, 'parts')
+          if os.path.exists(parts_dir):
+              import shutil
+              shutil.rmtree(parts_dir, ignore_errors=True)
+          # remove potential .download_info from old second code (not used)
+          info_file = os.path.join(OUT_DIR, '.download_info')
+          if os.path.exists(info_file):
+              os.remove(info_file)
+          EOF
+
+      - name: Push changes to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ github.event.inputs.output_folder }}/"
+          git commit -m "Download YouTube media [skip ci]" || echo "Nothing to commit"
+          git push
