@@ -1,0 +1,1 @@
+تست کنیدvless://9e4ae4b7-374d-4f6d-af68-d39c97432222@hi-trex.nahidapp.com:443?path=%2Fvless-ws&security=tls&encryption=none&insecure=0&host=trex.nahidapp.com&type=ws&allowInsecure=0&sni=trex.nahidapp.com#Channel :@Do1rcci
