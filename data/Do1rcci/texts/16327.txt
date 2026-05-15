@@ -1,0 +1,1 @@
+کانفیگ متصل :vless://061183f9-a722-4707-9160-3a2ee47209b3@nobitex.ir:80?path=%2F&security=&encryption=none&host=support.mindigosupport.ir&type=ws#testChannel :@Do1rcci
